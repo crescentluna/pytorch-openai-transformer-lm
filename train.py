@@ -251,7 +251,7 @@ if __name__ == '__main__':
     load_openai_pretrained_model(dh_model.transformer, n_ctx=n_ctx, n_special=n_special)
 
     dh_model.to(device)
-    dh_model = nn.DataParallel(dh_model)
+    # dh_model = nn.DataParallel(dh_model)
 
     n_updates = 0
     n_epochs = 0
