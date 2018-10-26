@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.utils import shuffle
 
 from analysis import rocstories as rocstories_analysis
-from datasets import rocstories
+from datasets import slots
 from model_pytorch import DoubleHeadModel, load_openai_pretrained_model
 from opt import OpenAIAdam
 from text_utils import TextEncoder
@@ -17,21 +17,19 @@ from utils import (encode_dataset, iter_data,
                    ResultLogger, make_path)
 from loss import MultipleChoiceLossCompute
 
-def transform_roc(X1, X2, X3):
+
+def transform_sens(X1):
     n_batch = len(X1)
     xmb = np.zeros((n_batch, 2, n_ctx, 2), dtype=np.int32)
     mmb = np.zeros((n_batch, 2, n_ctx), dtype=np.float32)
+
     start = encoder['_start_']
-    delimiter = encoder['_delimiter_']
-    for i, (x1, x2, x3), in enumerate(zip(X1, X2, X3)):
-        x12 = [start] + x1[:max_len] + [delimiter] + x2[:max_len] + [clf_token]
-        x13 = [start] + x1[:max_len] + [delimiter] + x3[:max_len] + [clf_token]
+    for i, x1 in enumerate(X1):
+        #print(start, max_len, clf_token)
+        x12 = [start] + x1[:max_len] + [clf_token]
         l12 = len(x12)
-        l13 = len(x13)
         xmb[i, 0, :l12, 0] = x12
-        xmb[i, 1, :l13, 0] = x13
         mmb[i, 0, :l12] = 1
-        mmb[i, 1, :l13] = 1
     # Position information that is added to the input embeddings in the TransformerModel
     xmb[:, :, :, 1] = np.arange(n_vocab + n_special, n_vocab + n_special + n_ctx)
     return xmb, mmb
@@ -124,15 +122,15 @@ def run_epoch():
 argmax = lambda x: np.argmax(x, 1)
 
 pred_fns = {
-    'rocstories': argmax,
+    'slots': argmax,
 }
 
 filenames = {
-    'rocstories': 'ROCStories.tsv',
+    'slots': 'slots.tsv',
 }
 
 label_decoders = {
-    'rocstories': None,
+    'slots': None,
 }
 
 if __name__ == '__main__':
@@ -201,36 +199,35 @@ if __name__ == '__main__':
     n_vocab = len(text_encoder.encoder)
 
     print("Encoding dataset...")
-    ((trX1, trX2, trX3, trY),
-     (vaX1, vaX2, vaX3, vaY),
-     (teX1, teX2, teX3)) = encode_dataset(*rocstories(data_dir, n_valid=args.n_valid),
+    ((trX1, trY),
+     (vaX1, vaY),
+     (teX1)) = encode_dataset(*slots(data_dir, n_valid=args.n_valid),
                                           encoder=text_encoder)
     encoder['_start_'] = len(encoder)
-    encoder['_delimiter_'] = len(encoder)
+    # encoder['_delimiter_'] = len(encoder)
     encoder['_classify_'] = len(encoder)
     clf_token = encoder['_classify_']
-    n_special = 3
+    n_special = 2
     max_len = n_ctx // 2 - 2
+    # n_ctx is the maximum number of token in an input sequence
     n_ctx = min(max(
-        [len(x1[:max_len]) + max(len(x2[:max_len]),
-                                 len(x3[:max_len])) for x1, x2, x3 in zip(trX1, trX2, trX3)]
-        + [len(x1[:max_len]) + max(len(x2[:max_len]),
-                                   len(x3[:max_len])) for x1, x2, x3 in zip(vaX1, vaX2, vaX3)]
-        + [len(x1[:max_len]) + max(len(x2[:max_len]),
-                                   len(x3[:max_len])) for x1, x2, x3 in zip(teX1, teX2, teX3)]
-        ) + 3, n_ctx)
+        [len(x1[:max_len]) for x1 in trX1]
+        + [len(x1[:max_len]) for x1 in vaX1]
+        + [len(x1[:max_len]) for x1 in teX1]
+    ) + 3, n_ctx)
+
     vocab = n_vocab + n_special + n_ctx
-    trX, trM = transform_roc(trX1, trX2, trX3)
-    vaX, vaM = transform_roc(vaX1, vaX2, vaX3)
+    trX, trM = transform_sens(trX1)
+    vaX, vaM = transform_sens(vaX1)
     if submit:
-        teX, teM = transform_roc(teX1, teX2, teX3)
+        teX, teM = transform_sens(teX1)
 
     n_train = len(trY)
     n_valid = len(vaY)
     n_batch_train = args.n_batch * max(n_gpu, 1)
     n_updates_total = (n_train // n_batch_train) * args.n_iter
 
-    dh_model = DoubleHeadModel(args, clf_token, 'multiple_choice', vocab, n_ctx)
+    dh_model = DoubleHeadModel(args, clf_token, ('classification', 5), vocab, n_ctx)
 
     criterion = nn.CrossEntropyLoss(reduce=False)
     model_opt = OpenAIAdam(dh_model.parameters(),
@@ -271,5 +268,5 @@ if __name__ == '__main__':
         dh_model.load_state_dict(torch.load(path))
         predict(dataset, args.submission_dir)
         if args.analysis:
-            rocstories_analysis(data_dir, os.path.join(args.submission_dir, 'ROCStories.tsv'),
-                                os.path.join(log_dir, 'rocstories.jsonl'))
+            rocstories_analysis(data_dir, os.path.join(args.submission_dir, 'slots.tsv'),
+                                os.path.join(log_dir, 'slots.jsonl'))
