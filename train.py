@@ -190,8 +190,10 @@ if __name__ == '__main__':
     submission_dir = args.submission_dir
 
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # n_gpu = torch.cuda.device_count()
+
     device = torch.device("cpu")
-    n_gpu = torch.cuda.device_count()
+    n_gpu = 0
     print("device", device, "n_gpu", n_gpu)
 
     logger = ResultLogger(path=os.path.join(log_dir, '{}.jsonl'.format(desc)), **args.__dict__)
