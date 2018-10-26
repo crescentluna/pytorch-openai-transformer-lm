@@ -190,7 +190,7 @@ if __name__ == '__main__':
     submission_dir = args.submission_dir
 
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
+    device = torch.device("cpu")
     n_gpu = torch.cuda.device_count()
     print("device", device, "n_gpu", n_gpu)
 
